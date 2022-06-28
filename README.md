@@ -1,2 +1,2 @@
 # Thesis_Anomaly_Prediction
-Bachelor's Thesis Artificial Intelligence for ChipSoft
+Bachelor's Thesis in Artificial Intelligence for ChipSoft
