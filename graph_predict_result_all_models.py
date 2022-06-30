@@ -1,3 +1,7 @@
+# plot the results of all methods together
+
+# Transformer
+
 import time
 begin = time.time()
 import matplotlib.pyplot as plt
@@ -12,30 +16,28 @@ threshold_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\new_labels_with_
 df2 = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\tryout_Transformer_thr2.csv')
 y_test_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\y_test.csv')
 
+# get model from file
 save_path = './Transformermodel.h5'
 model = keras.models.load_model(save_path)
 
 with open("X_test.bin", "rb") as data:
     X_test = pickle.load(data)
 
+# predict
 print("Predicting...")
 predicted = model.predict(X_test)
 print("Reshaping predicted")
 predicted = np.reshape(predicted, (predicted.size,))
 predicted = predicted[1:]
 
+# make lists for calculations result
 anomaly_list = []
 threshold_list = []
 y_test = []
-# 1007, 1489
-# 15007, 24989
-# 20007, 24989
+
 for ij in range(20007, 24989):
     anomaly_list.append(threshold_df.Anomaly[ij])
 
-# 993, 1475
-# 14993, 24975
-# 19993, 24975
 for ij in range(19993, 24975):
     threshold_list.append(df2.New_threshold[ij])
 
@@ -43,12 +45,11 @@ for ij in range(len(y_test_df)):
     y_test.append(y_test_df.y_test[ij])
 
 
+# calculate TP, TN, FN, and FP
 True_positives = 0
 True_negatives = 0
 False_negatives = 0
 False_positives = 0
-
-
 
 lower_thresh = (np.array(threshold_list)*0.65)
 
@@ -68,9 +69,8 @@ print("False_negatives: ", False_negatives)
 print("False_positives: ", False_positives)
 
 try:
+    # Calculate precision, recall, and the F1-score
     print("incorrect: ", False_negatives + False_positives)
-    accuracy = (True_negatives+True_positives)/(True_positives + True_negatives + False_negatives + False_positives)
-    print("accuracy: ", accuracy)
     precision = True_positives/(True_positives + False_positives)
     print("precision: ", precision)
     recall = True_positives/(True_positives + False_negatives)
@@ -81,15 +81,14 @@ except:
     print("error in calculations")
 try:
     Transformer_predicted = predicted
-    # plt.plot(X_train_list, 'p', label='X_train')
+    plt.plot(X_train_list, 'p', label='X_train')
 except Exception as e:
     print("plotting exception")
     print(str(e))
 print("Total time : ", time.time() - begin)
 
 
-
-
+# LSTM
 
 import time
 begin = time.time()
@@ -106,29 +105,28 @@ threshold_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\new_labels_with_
 df2 = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\tryout_LSTM_thr2.csv')
 y_test_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\y_test.csv')
 
+# get model from file
 save_path = './LSTMmodel.h5'
 model = keras.models.load_model(save_path)
 
 with open("X_test.bin", "rb") as data:
     X_test = pickle.load(data)
+
+# predict
 print("Predicting...")
 predicted = model.predict(X_test)
 print("Reshaping predicted")
 predicted = np.reshape(predicted, (predicted.size,))
 predicted = predicted[1:]
 
+# make lists for calculations result
 anomaly_list = []
 threshold_list = []
 y_test = []
-# 1007, 1489
-# 15007, 24989
-# 20007, 24989
+
 for ij in range(20007, 24989):
     anomaly_list.append(threshold_df.Anomaly[ij])
 
-# 993, 1475
-# 14993, 24975
-# 19993, 24975
 for ij in range(19993, 24975):
     threshold_list.append(df2.New_threshold[ij])
 
@@ -136,12 +134,11 @@ for ij in range(len(y_test_df)):
     y_test.append(y_test_df.y_test[ij])
 
 
+# calculate TP, TN, FN, and FP
 True_positives = 0
 True_negatives = 0
 False_negatives = 0
 False_positives = 0
-
-
 
 lower_thresh = (np.array(threshold_list)*0.6)
 
@@ -161,9 +158,8 @@ print("False_negatives: ", False_negatives)
 print("False_positives: ", False_positives)
 
 try:
+    # Calculate precision, recall, and the F1-score
     print("incorrect: ", False_negatives + False_positives)
-    accuracy = (True_negatives+True_positives)/(True_positives + True_negatives + False_negatives + False_positives)
-    print("accuracy: ", accuracy)
     precision = True_positives/(True_positives + False_positives)
     print("precision: ", precision)
     recall = True_positives/(True_positives + False_negatives)
@@ -183,7 +179,7 @@ except Exception as e:
 print("Total time : ", time.time() - begin)
 
 
-
+# Simple RNN
 
 """ Inspired by example from
 https://github.com/Vict0rSch/deep_learning/tree/master/keras/recurrent
@@ -206,44 +202,40 @@ threshold_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\new_labels_with_
 df2 = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\tryout_Simple_RNN_thr2.csv')
 y_test_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\y_test.csv')
 
+# get model from file
 save_path = './Simple_RNNmodel.h5'
 model = keras.models.load_model(save_path)
 
 with open("X_test.bin", "rb") as data:
     X_test = pickle.load(data)
 
-
+# predict
 print("Predicting...")
 predicted = model.predict(X_test)
 print("Reshaping predicted")
 predicted = np.reshape(predicted, (predicted.size,))
 predicted = predicted[1:]
-        
+
+# make lists for calculations result
 anomaly_list = []
 threshold_list = []
 y_test = []
 
-# 1007, 1489
-# 15007, 24989
-# 20007, 24989
 for ij in range(20007, 24989):
     anomaly_list.append(threshold_df.Anomaly[ij])
 
-# 993, 1475
-# 14993, 24975
-# 19993, 24975
 for ij in range(19993, 24975):
     threshold_list.append(df2.New_threshold[ij])
 
 for ij in range(len(y_test_df)):
     y_test.append(y_test_df.y_test[ij])
 
+
+# calculate TP, TN, FN, and FP
 True_positives = 0
 True_negatives = 0
 False_negatives = 0
 False_positives = 0
-
-
 
 lower_thresh = (np.array(threshold_list)*0.7)
 
@@ -262,9 +254,8 @@ print("True_positives: ", True_positives)
 print("False_negatives: ", False_negatives)
 print("False_positives: ", False_positives)
 try:
+    # Calculate precision, recall, and the F1-score
     print("incorrect: ", False_negatives + False_positives)
-    accuracy = (True_negatives+True_positives)/(True_positives + True_negatives + False_negatives + False_positives)
-    print("accuracy: ", accuracy)
     precision = True_positives/(True_positives + False_positives)
     print("precision: ", precision)
     recall = True_positives/(True_positives + False_negatives)
@@ -274,8 +265,8 @@ try:
 except:
     print("error in calculations")
 try:
+    # plot all results together
     plt.title("Original Values VS Predicted Values")
-    
     plt.plot(y_test[:len(y_test)], 'y', label='Original values')
     plt.plot(Transformer_predicted[:len(y_test)], 'g', label='Transformer')
     plt.plot(LSTM_predicted[:len(y_test)], 'b', label='LSTM')

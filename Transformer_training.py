@@ -1,5 +1,5 @@
 """ Inspired by example from
-https://github.com/Vict0rSch/deep_learning/tree/master/keras/recurrent
+https://keras.io/examples/timeseries/timeseries_classification_transformer/
 Uses the Keras (TensorFlow) backend
 The basic idea is to predict anomalies in a time-series.
 """
@@ -7,10 +7,9 @@ import time
 begin = time.time()
 import matplotlib.pyplot as plt
 import numpy as np
-from keras.layers.core import Dense, Activation, Dropout
 import pandas as pd
-from keras.models import Sequential
-from keras.layers import Dense, SimpleRNN
+from tensorflow import keras
+from tensorflow.keras import layers
 import pickle
 
 np.random.seed(1234)
@@ -19,7 +18,6 @@ np.random.seed(1234)
 sequence_length = 7
 batch_size = 1
 dropout = 0
-
 
 df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\Dataset\jips_dmch_uur_nogaps.csv')
 threshold_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\new_labels_with_thresholds.csv')
@@ -102,24 +100,41 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
 
     return X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df
 
-# Simple RNN model
-def build_model(input_shape):
-    model = Sequential()
-    layers = {'input': 1, 'hidden1': 64, 'hidden2': 256, 'hidden3': 100, 'output': 1}
+# TransformerEncoder block
+def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
+    # Attention and Normalization
+    x = layers.MultiHeadAttention(
+        key_dim=head_size, num_heads=num_heads, dropout=dropout
+    )(inputs, inputs)
+    x = layers.Dropout(dropout)(x)
+    x = layers.LayerNormalization(epsilon=1e-6)(x)
+    res = x + inputs
 
-    model.add(SimpleRNN(units=layers['hidden1'], input_shape=input_shape, input_dim=layers['input'], return_sequences=True))
-    model.add(Dropout(dropout))
-    model.add(SimpleRNN(units=layers['hidden2'], return_sequences=True))
-    model.add(Dropout(dropout))
-    model.add(SimpleRNN(units=layers['hidden3'])) 
-    model.add(Dropout(dropout))
-    model.add(Dense(units=layers['output']))
-    model.add(Activation("linear"))
+    # Feed Forward Part
+    x = layers.Conv1D(filters=ff_dim, kernel_size=4)(res)
+    x = layers.Dropout(dropout)(x)
+    x = layers.Conv1D(filters=inputs.shape[-1], kernel_size=3)(x)
+    x = layers.LayerNormalization(epsilon=1e-6)(x)
+    return x + res
 
+# transformer model
+def build_model(input_shape, head_size, num_heads, ff_dim, num_transformer_blocks, mlp_units, dropout=0, mlp_dropout=0):
+    inputs = keras.Input(shape=input_shape)
+    x = inputs
+    for _ in range(num_transformer_blocks):
+       x = transformer_encoder(x, head_size, num_heads, ff_dim, dropout)
+
+    x = layers.GlobalAveragePooling1D(data_format="channels_first")(x)
+    for dim in mlp_units:
+        x = layers.Dense(dim, activation="relu")(x)
+        x = layers.Dropout(mlp_dropout)(x)
+    outputs = layers.Dense(1, activation = "linear")(x)
+ 
+    model = keras.Model(inputs, outputs)
     start = time.time()
-    model.compile(loss="mse", optimizer="rmsprop")
     print("Compilation Time : ", time.time() - start)
     print("model: ", model)
+    model.summary()
     return model
 
 
@@ -132,45 +147,52 @@ def run_network(model=None, data=None):
     if data is None:
         print('Loading data... ')
         # split data into training and testset
-        X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 20000, 20001, 25000, threshold_result, threshold_input, date_time_data_df)
-    else:
+        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 20000, 20001, 25000, threshold_result, threshold_input, date_time_data_df)
+     else:
         X_train, y_train, X_test, y_test = data
 
     print('\nData Loaded. Compiling...\n')
-    input_shape = X_train.shape[1:]
 
     # Build the model
     if model is None:
-        model = build_model(input_shape)
-
+        input_shape = X_train.shape[1:]
+        print(input_shape)
+        n_classes = len(np.unique(y_train))
+        print(n_classes)
+        if model is None:
+            model = build_model(
+                input_shape,
+                head_size=256,
+                num_heads=4,
+                ff_dim=4,
+                num_transformer_blocks=2,
+                mlp_units=[256],
+                mlp_dropout=0,
+                dropout=0,
+            )
+        # compile the model
+        model.compile(loss="mse", optimizer="rmsprop")
     try:
         print("Training...")
         # train the model
         model.fit(
                 X_train, y_train,
-                batch_size=batch_size, validation_split=0.1)
-
-        # save the model
-        save_path = './Simple_RNNmodel.h5'
-        model.save(save_path)
-
-        # predict
-        print("Predicting...")
-        predicted = model.predict(X_test)
-        print("Reshaping predicted")
-        predicted = np.reshape(predicted, (predicted.size,))
-        predicted = predicted[1:]
-        
+                batch_size=batch_size, callbacks=callbacks, validation_split=0.1)
+        # model.evaluate(X_test, y_test, verbose=1)
     except KeyboardInterrupt:
         print("prediction exception")
         print('Training duration (s) : ', time.time() - global_start_time)
         return model, y_test, 0
-    
+
+    # save the model
+    save_path = './Transformermodel.h5'
+    model.save(save_path)
+
     # store values in files
     df2 = pd.DataFrame({
         'New_threshold': threshold_result,
     })
-    df2.to_csv('tryout_Simple_RNN_thr2.csv')
+    df2.to_csv('tryout_Transformer_thr2.csv')
 
     y_test_df = pd.DataFrame({
         'y_test': y_test
@@ -180,65 +202,9 @@ def run_network(model=None, data=None):
     with open("X_test.bin", "wb") as output:
         pickle.dump(X_test, output)
 
-    # make lists for calculations result
-    anomaly_list = []
-    threshold_list = []
-
-    for ij in range(20007, 24989):
-        anomaly_list.append(threshold_df.Anomaly[ij])
-
-    for ij in range(19993, 24975):
-        threshold_list.append(df2.New_threshold[ij])
-
-    # calculate TP, TN, FN, and FP
-    True_positives = 0
-    True_negatives = 0
-    False_negatives = 0
-    False_positives = 0
-
-    lower_thresh = (np.array(threshold_list)*0.7)
-
-    for anomaly, predict, thresh in zip(anomaly_list, predicted, lower_thresh):
-        if anomaly and predict >= thresh:
-            True_positives = True_positives + 1
-        elif not anomaly and predict < thresh:
-            True_negatives = True_negatives + 1
-        elif anomaly and predict < thresh:
-            False_negatives = False_negatives + 1
-        else:
-            False_positives  = False_positives + 1
-    
-    print("True_negatives: ", True_negatives)
-    print("True_positives: ", True_positives)
-    print("False_negatives: ", False_negatives)
-    print("False_positives: ", False_positives)
-    try:
-        # Calculate precision, recall, and the F1-score
-        print("incorrect: ", False_negatives + False_positives)
-        precision = True_positives/(True_positives + False_positives)
-        print("precision: ", precision)
-        recall = True_positives/(True_positives + False_negatives)
-        print("recall: ", recall)
-        F1_score = 2*True_positives/(2*True_positives + False_positives + False_negatives)
-        print("F1_score: ", F1_score)
-    except:
-        print("error in calculations")
-    try:
-        # plot the results
-        plt.title("Actual Test Values VS Predicted Values")
-        plt.plot(y_test[:len(y_test)], 'b', label='Original values')
-        plt.plot(predicted[:len(y_test)], 'g', label='Predicted values')
-        plt.plot(threshold_list, 'r', label='Threshold')
-        plt.plot(lower_thresh, 'm', label='Lower Threshold')
-        plt.plot(anomaly_list, 'y', label='Anomalies (0 if normal data point, 1 if anomaly)')
-        plt.legend()
-        plt.show()
-    except Exception as e:
-        print("plotting exception")
-        print(str(e))
     print('Training duration (s) : ', time.time() - global_start_time)
 
-    return model, y_test, predicted
+    return model, y_test
 
 
 run_network()

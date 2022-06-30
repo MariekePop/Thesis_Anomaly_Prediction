@@ -1,17 +1,12 @@
 # makes a plot with all normal data points in blue and all anomalies in yellow
 
-import numpy as np                               # vectors and matrices
-import pandas as pd                              # tables and data manipulations
-import matplotlib.pyplot as plt                  # plots
-import seaborn as sns
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # read data from csv file
 df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\new_labels_with_thresholds.csv')
 df2 = df.loc[df['y'] < 1494]
 df3 = df2.loc[df['y'] >1002]
-
-
-
 
 # plot per category in column Anomaly (first plot all False values and then all True values)
 groups = df3.groupby('Anomaly')

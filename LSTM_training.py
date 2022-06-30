@@ -23,6 +23,7 @@ df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\Dataset\jips_dmch_uur_noga
 threshold_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\new_labels_with_thresholds.csv')
 
 
+# center data around zero (same transformation for the dynamic threshold)
 def z_norm(result, threshold_input, threshold_result):
     result_mean = result.mean()
     result_std = result.std()
@@ -40,6 +41,7 @@ def z_norm(result, threshold_input, threshold_result):
     return result, result_mean, threshold_result
 
 
+# split the data into training and testset
 def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_result, threshold_input, date_time_data_df):
     data = df['Count']
     threshold_data = threshold_df['Threshold'].values.tolist()
@@ -63,7 +65,9 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
     train = result[train_start:train_end, :]
     # shuffle in-place
     np.random.shuffle(train)
+    # add sequences to X_train
     X_train = train[:, :-1]
+    # add target values to y_train
     y_train = train[:, -1]
 
     # test data
@@ -82,7 +86,9 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
 
     threshold_result = threshold_result[:, -1].tolist()
     date_time_data_df = np.array(date_time_data_df)[:, -1].tolist()
+    # add sequences to X_test
     X_test = result[:, :-1]
+    # add target values to y_test
     y_test = result[:, -1]
 
     print("Shape X_train", np.shape(X_train))
@@ -94,21 +100,7 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
 
     return X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df
 
-def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
-    # Attention and Normalization
-    x = layers.MultiHeadAttention(
-        key_dim=head_size, num_heads=num_heads, dropout=dropout
-    )(inputs, inputs)
-    x = layers.Dropout(dropout)(x)
-    x = layers.LayerNormalization(epsilon=1e-6)(x)
-    res = x + inputs
-
-    # Feed Forward Part
-    x = layers.Conv1D(filters=ff_dim, kernel_size=4)(res)
-    x = layers.Dropout(dropout)(x)
-    x = layers.Conv1D(filters=inputs.shape[-1], kernel_size=3)(x)
-    x = layers.LayerNormalization(epsilon=1e-6)(x)
-    return x + res
+# LSTM model
 def build_model():
     import matplotlib.pyplot as plt
     import numpy as np
@@ -153,16 +145,14 @@ def run_network(model=None, data=None):
 
     if data is None:
         print('Loading data... ')
-        # train on first 700 samples and test on next 300 samples (has anomaly)
+        # split data into training and testset
         X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 20000, 20001, 25000, threshold_result, threshold_input, date_time_data_df)
-        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 15000, 15001, 25000, threshold_result, threshold_input, date_time_data_df)
-        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 1000, 1001, 1500, threshold_result, threshold_input, date_time_data_df)
-        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 100, 101, 150, threshold_result, threshold_input, date_time_data_df)
     else:
         X_train, y_train, X_test, y_test = data
 
     print('\nData Loaded. Compiling...\n')
 
+    # Build the model
     if model is None:
         input_shape = X_train.shape[1:]
         print(input_shape)
@@ -173,27 +163,27 @@ def run_network(model=None, data=None):
         model.compile(loss="mse", optimizer="rmsprop")
         callbacks = [keras.callbacks.EarlyStopping(patience=3, restore_best_weights=True)]
 
-
     try:
         print("Training...")
+        # train the model
         model.fit(
                 X_train, y_train,
                 batch_size=batch_size, callbacks=callbacks, validation_split=0.1)
-        # model.evaluate(X_test, y_test, verbose=1)
+
     except KeyboardInterrupt:
         print("prediction exception")
         print('Training duration (s) : ', time.time() - global_start_time)
         return model, y_test, 0
-    
+
+    # save the model
     save_path = './LSTMmodel.h5'
     model.save(save_path)
 
+    # save values in files
     df2 = pd.DataFrame({
         'New_threshold': threshold_result,
     })
     df2.to_csv('tryout_LSTM_thr2.csv')
-
-
 
     y_test_df = pd.DataFrame({
         'y_test': y_test

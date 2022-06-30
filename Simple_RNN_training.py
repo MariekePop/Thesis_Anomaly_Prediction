@@ -24,6 +24,7 @@ dropout = 0
 df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\Dataset\jips_dmch_uur_nogaps.csv')
 threshold_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\new_labels_with_thresholds.csv')
 
+# center data around zero (same transformation for the dynamic threshold)
 def z_norm(result, threshold_input, threshold_result):
     result_mean = result.mean()
     result_std = result.std()
@@ -40,7 +41,7 @@ def z_norm(result, threshold_input, threshold_result):
         print("z_norm")
     return result, result_mean, threshold_result
 
-
+# split the data into training and testset
 def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_result, threshold_input, date_time_data_df):
     data = df['Count']
     threshold_data = threshold_df['Threshold'].values.tolist()
@@ -64,8 +65,9 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
     train = result[train_start:train_end, :]
     # shuffle in-place
     np.random.shuffle(train)
-    
+    # add sequences to X_train
     X_train = train[:, :-1]
+    # add target values to y_train
     y_train = train[:, -1]
 
     # test data
@@ -84,8 +86,9 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
 
     threshold_result = threshold_result[:, -1].tolist()
     date_time_data_df = np.array(date_time_data_df)[:, -1].tolist()
-    
+    # add sequences to X_test
     X_test = result[:, :-1]
+    # add target values to y_test
     y_test = result[:, -1]
 
     print("Shape X_train", np.shape(X_train))
@@ -97,7 +100,7 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
 
     return X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df
 
-
+# Simple RNN model
 def build_model(input_shape):
     model = Sequential()
     layers = {'input': 1, 'hidden1': 64, 'hidden2': 256, 'hidden3': 100, 'output': 1}
@@ -126,49 +129,39 @@ def run_network(model=None, data=None):
 
     if data is None:
         print('Loading data... ')
-        # train on first 700 samples and test on next 300 samples (has anomaly)
+        # split data into training and testset
         X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 20000, 20001, 25000, threshold_result, threshold_input, date_time_data_df)
-        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 15000, 15001, 25000, threshold_result, threshold_input, date_time_data_df)
-        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 1000, 1001, 1500, threshold_result, threshold_input, date_time_data_df)
-        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 100, 101, 150, threshold_result, threshold_input, date_time_data_df)
     else:
         X_train, y_train, X_test, y_test = data
 
     print('\nData Loaded. Compiling...\n')
     input_shape = X_train.shape[1:]
+
+    # Build the model
     if model is None:
         model = build_model(input_shape)
 
     try:
         print("Training...")
+        # train the model
         model.fit(
                 X_train, y_train,
                 batch_size=batch_size, validation_split=0.1)
 
-        
-
-
-
-
+        # save the model
         save_path = './Simple_RNNmodel.h5'
         model.save(save_path)
-
-        
 
     except KeyboardInterrupt:
         print("prediction exception")
         print('Training duration (s) : ', time.time() - global_start_time)
         return model, y_test, 0
     
-    
+    # store values in files
     df2 = pd.DataFrame({
         'New_threshold': threshold_result,
     })
     df2.to_csv('tryout_Simple_RNN_thr2.csv')
-
-
-
-
 
     y_test_df = pd.DataFrame({
         'y_test': y_test
@@ -177,10 +170,6 @@ def run_network(model=None, data=None):
 
     with open("X_test.bin", "wb") as output:
         pickle.dump(X_test, output)
-
-    
-        
-
 
     print('Training duration (s) : ', time.time() - global_start_time)
 

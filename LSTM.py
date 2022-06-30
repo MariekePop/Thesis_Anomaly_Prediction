@@ -7,7 +7,7 @@ import time
 begin = time.time()
 import matplotlib.pyplot as plt
 import numpy as np
-from keras.layers.core import Dense, Activation, Dropout
+from keras.layers.core import Dense
 from keras.layers.recurrent import LSTM
 from keras.models import Sequential
 import pandas as pd
@@ -24,6 +24,8 @@ dropout = 0
 df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\Dataset\jips_dmch_uur_nogaps.csv')
 threshold_df = pd.read_csv(r'C:\Users\f.de.kok\Documents\thesis\new_labels_with_thresholds.csv')
 
+
+# center data around zero (same transformation for the dynamic threshold)
 def z_norm(result, threshold_input, threshold_result):
     result_mean = result.mean()
     result_std = result.std()
@@ -41,6 +43,7 @@ def z_norm(result, threshold_input, threshold_result):
     return result, result_mean, threshold_result
 
 
+# split the data into training and testset
 def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_result, threshold_input, date_time_data_df):
     data = df['Count']
     threshold_data = threshold_df['Threshold'].values.tolist()
@@ -64,8 +67,9 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
     train = result[train_start:train_end, :]
     # shuffle in-place
     np.random.shuffle(train)
-    
+    # add sequences to X_train
     X_train = train[:, :-1]
+    # add target values to y_train
     y_train = train[:, -1]
 
     # test data
@@ -84,8 +88,9 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
 
     threshold_result = threshold_result[:, -1].tolist()
     date_time_data_df = np.array(date_time_data_df)[:, -1].tolist()
-    
+    # add sequences to X_test
     X_test = result[:, :-1]
+    # add target values to y_test
     y_test = result[:, -1]
 
     print("Shape X_train", np.shape(X_train))
@@ -97,7 +102,7 @@ def get_split_prep_data(train_start, train_end, test_start, test_end, threshold_
 
     return X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df
 
-
+# LSTM model
 def build_model():
     model = Sequential()
     layers = {'input': 1, 'hidden1': 64, 'hidden2': 100, 'hidden3': 64, 'output': 1}
@@ -136,38 +141,29 @@ def run_network(model=None, data=None):
 
     if data is None:
         print('Loading data... ')
-        # train on first 700 samples and test on next 300 samples (has anomaly)
+        # split data into training and testset
         X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 20000, 20001, 25000, threshold_result, threshold_input, date_time_data_df)
-        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 15000, 15001, 25000, threshold_result, threshold_input, date_time_data_df)
-        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 1000, 1001, 1500, threshold_result, threshold_input, date_time_data_df)
-        # X_train, y_train, X_test, y_test, threshold_result, threshold_input, date_time_data_df = get_split_prep_data(0, 100, 101, 150, threshold_result, threshold_input, date_time_data_df)
     else:
         X_train, y_train, X_test, y_test = data
 
     print('\nData Loaded. Compiling...\n')
 
+    # Build the model
     if model is None:
         model = build_model()
 
     try:
         print("Training...")
+        # train the model
         model.fit(
                 X_train, y_train,
                 batch_size=batch_size, validation_split=0.1)
 
-        
-
-
-
-
+        # save the model
         save_path = './LSTMmodel.h5'
         model.save(save_path)
 
-
-
-
-
-
+        # predict
         print("Predicting...")
         predicted = model.predict(X_test)
         print("Reshaping predicted")
@@ -180,17 +176,11 @@ def run_network(model=None, data=None):
         print('Training duration (s) : ', time.time() - global_start_time)
         return model, y_test, 0
     
-
+    # store values in files
     df2 = pd.DataFrame({
         'New_threshold': threshold_result,
     })
     df2.to_csv('tryout_LSTM_thr2.csv')
-
-
-    
-
-    
-
 
     y_test_df = pd.DataFrame({
         'y_test': y_test
@@ -200,33 +190,21 @@ def run_network(model=None, data=None):
     with open("X_test.bin", "wb") as output:
         pickle.dump(X_test, output)
 
-    
-        
-
-
-
+    # make lists for calculations result
     anomaly_list = []
     threshold_list = []
 
-    # 1007, 1489
-    # 15007, 24989
-    # 20007, 24989
     for ij in range(20007, 24989):
         anomaly_list.append(threshold_df.Anomaly[ij])
 
-    # 993, 1475
-    # 14993, 24975
-    # 19993, 24975
     for ij in range(19993, 24975):
         threshold_list.append(df2.New_threshold[ij])
 
+    # calculate TP, TN, FN, and FP
     True_positives = 0
     True_negatives = 0
     False_negatives = 0
     False_positives = 0
-
-
-
 
     lower_thresh = (np.array(threshold_list)*0.6)
 
@@ -245,9 +223,8 @@ def run_network(model=None, data=None):
     print("False_negatives: ", False_negatives)
     print("False_positives: ", False_positives)
     try:
+        # Calculate precision, recall, and the F1-score
         print("incorrect: ", False_negatives + False_positives)
-        accuracy = (True_negatives+True_positives)/(True_positives + True_negatives + False_negatives + False_positives)
-        print("accuracy: ", accuracy)
         precision = True_positives/(True_positives + False_positives)
         print("precision: ", precision)
         recall = True_positives/(True_positives + False_negatives)
@@ -257,8 +234,8 @@ def run_network(model=None, data=None):
     except:
         print("error in calculations")
     try:
+        # plot the results
         plt.title("Actual Test Values VS Predicted Values")
-        
         plt.plot(y_test[:len(y_test)], 'b', label='Original values')
         plt.plot(predicted[:len(y_test)], 'g', label='Predicted values')
         plt.plot(threshold_list, 'r', label='Threshold')
